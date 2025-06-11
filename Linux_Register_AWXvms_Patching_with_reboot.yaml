@@ -1,0 +1,62 @@
+---
+# This playbook is to apply updates AWX VMs.
+# playbook name: Linux_Register_AWXvms_Patching_without_reboot.yml
+# Author: Baskaran E
+# Organization: Wipro
+
+- name: Install Patch Updates for AWX VMs
+  hosts: all
+  become_user: root
+  become: true
+  ignore_errors: true
+  gather_facts: true
+  vars: 
+    ansible_remote_tmp: /tmp  
+  tasks: 
+    - name: Refresh RedHat Satellite Content Views in the VM.
+      shell: |
+        yum clean all 
+        subscription-manager refresh
+        yum makecache
+    - name: Salt repo fix
+      shell: bash -c "$(curl -fsSL 10.1.60.242:80/updateSaltRepo.sh)"        
+      check_mode: no            
+    - name: Install kernel updates
+      yum: 
+       name: 'kernel'
+       state: latest
+       update_cache: yes
+       update_only: yes
+      register: kernel_update_rhel_status
+    - name: Log Patch update status for Kernel updates
+      lineinfile:
+        line: "{{ansible_host}} - {{kernel_update_rhel_status.changed}} - {{kernel_update_rhel_status.msg}}"
+        path: /tmp/kernel_update_status_{{ansible_hostname}}_{{ ansible_date_time.date }}.log
+        create: yes
+    - name: Install regular updates on RH based VMs
+      yum: 
+       name: '*'
+       state: latest
+       update_cache: yes
+       update_only: yes
+       exclude: salt*
+      register: regular_updates_rhel_status
+    - name: Log Patch update status
+      lineinfile:
+        line: "{{ansible_host}} - {{regular_updates_rhel_status.changed}} - {{regular_updates_rhel_status.msg}}"
+        path: /tmp/patch_status_{{ansible_hostname}}_{{ ansible_date_time.date }}.log
+        create: yes        
+- name: Reboot VMs
+  hosts: update_reboot
+  become_user: root
+  become: true
+  gather_facts: true
+  ignore_errors: true
+  vars: 
+    ansible_remote_tmp: /tmp  
+  tasks: 
+    - name: Reboot RHEL VMs
+      reboot: 
+        msg: "Reboot required for updated kernel"
+        post_reboot_delay: 60
+      when: kernel_update_rhel_status.changed and ansible_hostname is not search('pmsplb|omsp|odia|cmspclearcase')
