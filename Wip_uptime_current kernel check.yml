@@ -1,0 +1,41 @@
+---
+- name: Check uptime and kernel version on RHEL, Oracle Linux, and Ubuntu
+  hosts: all
+  become: yes
+  tasks:
+    - name: Gather system facts
+      ansible.builtin.setup:
+
+    - name: Check uptime
+      ansible.builtin.command:
+        cmd: uptime
+      register: uptime_result
+
+    - name: Check kernel version
+      ansible.builtin.command:
+        cmd: uname -r
+      register: kernel_version_result
+
+    - name: Display uptime
+      ansible.builtin.debug:
+        msg: "System Uptime: {{ uptime_result.stdout }}"
+
+    - name: Display kernel version
+      ansible.builtin.debug:
+        msg: "Kernel Version: {{ kernel_version_result.stdout }}"
+
+    - name: Identify OS family for conditional tasks
+      ansible.builtin.debug:
+        msg: "The operating system is {{ ansible_facts['distribution'] }}"
+
+    # Conditional logic can be added for specific OS-based tasks if needed
+    - name: Handle RHEL, Oracle Linux, and Ubuntu conditions
+      ansible.builtin.debug:
+        msg: |
+          {% if ansible_facts['distribution'] == 'RedHat' %}
+            This is a RHEL or Oracle Linux system.
+          {% elif ansible_facts['distribution'] == 'Ubuntu' %}
+            This is an Ubuntu system.
+          {% else %}
+            This is an unsupported distribution.
+          {% endif %}

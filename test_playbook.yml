@@ -1,0 +1,109 @@
+---
+- name: Post-Patch Validation on RHEL and Oracle and Ubuntu Linux OS
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Set hostname and IP
+      set_fact:
+        hostname: "{{ ansible_hostname }}"
+        ip_address: "{{ ansible_default_ipv4.address }}"
+
+    - name: Get uptime
+      shell: uptime -p
+      register: uptime_result
+      changed_when: false
+
+    ###### RHEL / Oracle tasks ######
+
+    - name: Current kernel on RHEL
+      shell: uname -r
+      register: current_kernel_result_rhel
+      when: ansible_os_family == "RedHat"
+      changed_when: false
+
+    - name: Latest installed kernel on RHEL
+      shell: rpm -qa --last | grep kernel-core | awk '{print $1}' | sort -V | tail -n1 | sed 's/kernel-core-//'
+      register: last_kernel_result_rhel
+      when: ansible_os_family == "RedHat"
+      changed_when: false
+
+    - name: Install date of latest kernel on RHEL
+      shell: rpm -qa --last | grep kernel-core | awk '{print $2, $3, $4}' | sort -V | tail -n1
+      register: last_kernel_date_result_rhel
+      when: ansible_os_family == "RedHat"
+      changed_when: false
+
+    - name: Reboot status on RHEL
+      shell: |
+        KERNEL_NEW=$(rpm -q --last kernel | head -1 | awk '{print $1}' | sed 's/kernel-//')
+        KERNEL_NOW=$(uname -r)
+        if [[ "$KERNEL_NEW" != "$KERNEL_NOW" ]]; then echo "Reboot Needed"; else echo "Already Rebooted"; fi
+      register: reboot_status_rhel
+      when: ansible_os_family == "RedHat"
+      changed_when: false
+      ignore_errors: true
+
+    ###### Ubuntu tasks ######
+
+    - name: Current kernel on Ubuntu
+      shell: uname -r
+      register: current_kernel_result_ubuntu
+      when: ansible_distribution == "Ubuntu"
+      changed_when: false
+
+    - name: Latest installed kernel on Ubuntu
+      shell: grep linux-image /var/log/dpkg.log | awk '{print $6}' | sort -V | tail -n1
+      register: last_kernel_result_ubuntu
+      when: ansible_distribution == "Ubuntu"
+      changed_when: false
+
+    - name: Install date of latest kernel on Ubuntu
+      shell: grep linux-image /var/log/dpkg.log | awk '{print $1}' | sort -V | tail -n1
+      register: last_kernel_date_result_ubuntu
+      when: ansible_distribution == "Ubuntu"
+      changed_when: false
+
+    - name: Reboot status on Ubuntu
+      shell: |
+        KERNEL_NEW=$(dpkg -l | grep linux-image | grep ^ii | awk '{print $3}' | sort -V | tail -n1)
+        KERNEL_NOW=$(uname -r)
+        if [[ "$KERNEL_NEW" != "$KERNEL_NOW" ]]; then echo "Reboot Needed"; else echo "Already Rebooted"; fi
+      register: reboot_status_ubuntu
+      when: ansible_distribution == "Ubuntu"
+      changed_when: false
+      ignore_errors: true
+
+    ###### Summary Report ######
+
+    - name: Summary Report for RHEL/Oracle
+      debug:
+        msg: "{{ 
+          (
+            'Host: ' ~ hostname ~ ' (' ~ ip_address ~ ')\\n' ~
+            'OS : RedHatOracleLinux\\n' ~
+            'Uptime : ' ~ (uptime_result.stdout | default('N/A')) ~ '\\n' ~
+            'Current Kernel : ' ~ (current_kernel_result_rhel.stdout | default('N/A')) ~ '\\n' ~
+            'Latest Installed : ' ~ (last_kernel_result_rhel.stdout | default('N/A')) ~ '\\n' ~
+            'Installed Date : ' ~ (last_kernel_date_result_rhel.stdout | default('N/A')) ~ '\\n' ~
+            'Reboot Status : ' ~ (reboot_status_rhel.stdout | default('N/A'))
+          ) | replace('\\n', '\n')
+         }}"
+      when: ansible_os_family == "RedHat"
+
+    - name: Summary Report for Ubuntu
+      debug:
+        msg: "{{ 
+          (
+            'Host: ' ~ hostname ~ ' (' ~ ip_address ~ ')\\n' ~
+            'OS : Ubuntu\\n' ~
+            'Uptime : ' ~ (uptime_result.stdout | default('N/A')) ~ '\\n' ~
+            'Current Kernel : ' ~ (current_kernel_result_ubuntu.stdout | default('N/A')) ~ '\\n' ~
+            'Latest Installed : ' ~ (last_kernel_result_ubuntu.stdout | default('N/A')) ~ '\\n' ~
+            'Installed Date : ' ~ (last_kernel_date_result_ubuntu.stdout | default('N/A')) ~ '\\n' ~
+            'Reboot Status : ' ~ (reboot_status_ubuntu.stdout | default('N/A'))
+          ) | replace('\\n', '\n')
+         }}"
+      when: ansible_distribution == "Ubuntu"

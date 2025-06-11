@@ -1,0 +1,53 @@
+---
+- name: Post-Patch Validation on RHEL and Oracle Linux OS
+  hosts: all
+  become_user: root    
+  become: true
+  vars:
+    report_file: /tmp/post_patch_report_combined.csv
+  tasks:
+
+    - name: Check uptime
+      shell: uptime -p
+      register: uptime_result
+      changed_when: false
+
+    - name: Check kernel version
+      shell: uname -r
+      register: kernel_version_result
+      changed_when: false
+        
+    # Check if reboot required or already rebooted
+    - name: "Check if reboot required"
+      shell: | 
+       KERNEL_NEW=$(rpm -q --last kernel |head -1 | awk '{print $1}'|sed 's/kernel-//') 
+       KERNEL_NOW=$(uname -r)
+       if [[ $KERNEL_NEW != $KERNEL_NOW ]]; then echo "reboot needed"; else echo "Already Rebooted"; fi
+      ignore_errors: true
+      register: reboot_status
+      changed_when: false
+      
+    - name: Prepare line for CSV
+      set_fact: 
+        csv_line: "{{ ansible_hostname }}, {{ ansible_default_ipv4.address }}, {{ uptime_result.stdout }}, {{ kernel_version_result.stdout }}, {{ reboot_status.stdout }}"
+    
+    - name: Add CSV header (only once)
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.shell: |
+        echo "Hostname,IP Address,Uptime,Current Kernel,Reboot Status" > {{ report_file }}
+      args:
+        executable: /bin/bash
+
+    - name: Append CSV line to combined report on control node 
+      delegate_to: localhost
+      ansible.builtin.shell: |
+        echo "{{ csv_line}}" >> {{ report_file }}
+      args: 
+        executable: /bin/bash
+
+    - name: Show combined report location
+      run_once: true
+      delegate_to: localhost
+      debug:
+        msg: "Combined CSV report generated at {{ report_file }}"

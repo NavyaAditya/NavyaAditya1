@@ -1,0 +1,30 @@
+---
+- name: Check system availability and sudo root access
+  hosts: all
+  gather_facts: false
+  become_user: root
+  become: true
+  tasks:
+
+    - name: Ping the system
+      ping:
+      register: ping_result
+      ignore_errors: true
+
+    - name: Display ping status
+      debug:
+        msg: 
+          - "Ping to {{ inventory_hostname }}: {{ 'Successful' if ping_result.ping is defined else 'Failed' }}"
+
+    - name: Check sudo access by running a privileged command
+      command: whoami
+      register: sudo_check
+      ignore_errors: true
+      when: ping_result.ping is defined
+
+    - name: Display sudo access status
+      debug:
+        msg: 
+          - "{% if ping_result.ping is not defined %}SKIPPED: {{ inventory_hostname }} is unreachable.{% endif %}"
+          - "{% if ping_result.ping is defined and sudo_check.stdout == 'root' %}SUCCESS: User has sudo root access on {{ inventory_hostname }}.{% endif %}"
+          - "{% if ping_result.ping is defined and sudo_check.stdout != 'root' %}FAILURE: User does NOT have sudo root access on {{ inventory_hostname }}.{% endif %}"
