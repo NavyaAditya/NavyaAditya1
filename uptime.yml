@@ -2,6 +2,7 @@
 - name: date
   hosts: localhost
   gather_facts: false
+  become: false
   tasks:
     - name: Uptime check
       shell: date
